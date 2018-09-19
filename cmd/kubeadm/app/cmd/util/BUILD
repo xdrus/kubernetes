@@ -18,6 +18,7 @@ go_library(
         "//staging/src/k8s.io/client-go/util/cert:go_default_library",
         "//vendor/github.com/pkg/errors:go_default_library",
         "//vendor/github.com/spf13/cobra:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
     ],
 )
 

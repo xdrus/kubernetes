@@ -19,8 +19,10 @@ package util
 import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
@@ -72,4 +74,15 @@ func FindExistingKubeConfig(file string) string {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	rules.Precedence = append(rules.Precedence, kubeadmconstants.GetAdminKubeConfigPath())
 	return rules.GetDefaultFilename()
+}
+
+// AddCRISocketFlag adds the cri-socket flag to the supplied flagSet
+func AddCRISocketFlag(flagSet *pflag.FlagSet, criSocket *string, deprecated bool) {
+	flagSet.StringVar(
+		criSocket, options.NodeCRISocket, *criSocket,
+		"Path to the CRI socket to connect to. Use this option if you have more than one CRI installed or one with non-standard CRI socket.",
+	)
+	if deprecated {
+		flagSet.MarkDeprecated(options.NodeCRISocket, "The flag is deprecated for this sub-command. Please, avoid using it.")
+	}
 }

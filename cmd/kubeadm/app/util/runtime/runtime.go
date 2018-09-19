@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -54,7 +55,7 @@ func NewContainerRuntime(execer utilsexec.Interface, criSocket string) (Containe
 	var toolName string
 	var runtime ContainerRuntime
 
-	if criSocket != kubeadmapiv1beta1.DefaultCRISocket {
+	if criSocket != kubeadmapiv1beta1.DefaultDockerCRISocket {
 		toolName = "crictl"
 		// !!! temporary work around crictl warning:
 		// Using "/var/run/crio/crio.sock" as endpoint is deprecated,
@@ -179,4 +180,53 @@ func (runtime *CRIRuntime) ImageExists(image string) (bool, error) {
 func (runtime *DockerRuntime) ImageExists(image string) (bool, error) {
 	err := runtime.exec.Command("docker", "inspect", image).Run()
 	return err == nil, nil
+}
+
+// isExistingSocket checks if path exists and is domain socket
+func isExistingSocket(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return fileInfo.Mode()&os.ModeSocket != 0
+}
+
+// detectCRISocketImpl is separated out only for test purposes, DON'T call it directly, use DetectCRISocket instead
+func detectCRISocketImpl(isSocket func(string) bool) (string, error) {
+	foundCRISockets := []string{}
+	knownCRISockets := []string{
+		// /var/run/dockershim.sock is deliberately omitted from here, we have a separate Docker check below
+		"/run/containerd/containerd.sock",
+		"/var/run/crio/crio.sock",
+	}
+
+	const dockerSocket = "/var/run/docker.sock" // The Docker socket is not CRI compatible
+	if isSocket(dockerSocket) {
+		foundCRISockets = append(foundCRISockets, kubeadmapiv1beta1.DefaultDockerCRISocket)
+	}
+
+	for _, socket := range knownCRISockets {
+		if isSocket(socket) {
+			foundCRISockets = append(foundCRISockets, socket)
+		}
+	}
+
+	switch len(foundCRISockets) {
+	case 0:
+		return "", pkgerrors.New("No CRI socket detected, please use the --cri-socket option")
+	case 1:
+		return foundCRISockets[0], nil
+	default:
+		return "", pkgerrors.Errorf("Found multiple CRI sockets, please use --cri-socket to select one: %s", strings.Join(foundCRISockets, ", "))
+	}
+}
+
+// DetectCRISocket uses a list of known CRI sockets to detect one. If more than one or none is discovered, an error is returned.
+func DetectCRISocket() (string, error) {
+	if goruntime.GOOS != "linux" {
+		return kubeadmapiv1beta1.DefaultDockerCRISocket, nil
+	}
+
+	return detectCRISocketImpl(isExistingSocket)
 }
